@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
-
-# Define here the models for your scraped items
-#
-# See documentation in:
-# http://doc.scrapy.org/en/latest/topics/items.html
-
 import scrapy
 
 
-class ArmsTransfersItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+class ArmsTransfer(scrapy.Item):
+    exporter = scrapy.Field()
+    importer = scrapy.Field()
+    category = scrapy.Field()
+    num_items = scrapy.Field()
+    state_of_origin = scrapy.Field()  # Only has a value if state_of_origin != exporter
+    intermediate_locations = scrapy.Field()  # Only has a value if filled
+    comments = scrapy.Field()
+
