@@ -2,7 +2,8 @@
 import scrapy
 
 
-class ArmsTransfer(scrapy.Item):
+class ArmsTransferItem(scrapy.Item):
+    year = scrapy.Field()
     exporter = scrapy.Field()
     importer = scrapy.Field()
     category = scrapy.Field()
