@@ -1,62 +1,74 @@
 # -*- coding: utf-8 -*-
 from arms_transfers.items import ArmsTransferItem
+from bs4 import BeautifulSoup
 import itertools
 import pycountry
 import scrapy
-import urllib3
 
 
 class UnrocaSpider(scrapy.Spider):
     name = 'unroca'
     allowed_domains = ['unroca.org']
-    start_urls = ['https://www.unroca.org/united-states/report/2016/']
 
-    '''def start_requests(self):
-        country_names = [country.official_name if hasattr(country, 'official_name')
-                         else country.name for country in list(pycountry.countries)]
-        country_names = [name.lower().replace(' ', '-') for name in country_names]
+    @staticmethod
+    def get_country_names():
+        for country in list(pycountry.countries):
+            yield country.name.lower().replace(' ', '-')
+            if hasattr(country, 'official_name'):
+                yield country.official_name.lower().replace(' ', '-')
 
+    def start_requests(self):
+        country_names = set(UnrocaSpider.get_country_names())
         base_url = 'https://www.unroca.org/{}/report/{}/'
         url_param_tuples = list(itertools.product(country_names, range(2010, 2017)))
         start_urls = [base_url.format(param_tuple[0], param_tuple[1]) for param_tuple in url_param_tuples]
         for url in start_urls:
-            yield scrapy.Request(url, self.parse)'''
+            yield scrapy.Request(url, self.parse)
 
     def parse(self, response):
         if response.status == 200:
-            url_params = urllib3.util.parse_url(response.request.url).path.split('/')
-            div_panels = response.selector.xpath('//div[contains(@class, "panel-body")]')
-            export_trows = div_panels[1].xpath('./table/tbody/tr')
-            import_trows = div_panels[2].xpath('./table/tbody/tr')
 
-            for row in export_trows:
-                export_item = ArmsTransferItem()
+            # Due to random UN redirects ensure that we are looking at a state's original report.
+            doc_h4 = response.selector.xpath('//h4[contains(@class, "unroca")]')
+            doc_h4_text = doc_h4.xpath('./text()')
+            if len(doc_h4_text) >= 1 and doc_h4_text[0].extract() == 'UNROCA original report':
+                report_details = doc_h4.xpath('following-sibling::*/text()')[0].extract().split()
+                reporting_year = report_details[-1]
+                reporting_state = ' '.join(report_details[:-1])
+                div_panels = response.selector.xpath('//div[contains(@class, "panel-body")]')
+                export_trows = div_panels[1].xpath('./table/tbody/tr')
+                import_trows = div_panels[2].xpath('./table/tbody/tr')
 
-                arms_transfer_values = list(map(str.strip, row.xpath('./td/text()').extract()))
+                for row in export_trows:
+                    export_item = ArmsTransferItem()
 
-                export_item['year'] = url_params[3]
-                export_item['exporter'] = url_params[1]
-                export_item['importer'] = arms_transfer_values[0]
-                export_item['category'] = row.xpath('./th/text()')[0].extract()
-                export_item['num_items'] = arms_transfer_values[1]
-                export_item['state_of_origin'] =arms_transfer_values[2]
-                export_item['intermediate_locations'] = None
-                export_item['comments'] = arms_transfer_values[3]
+                    row_soup = BeautifulSoup(row.extract(), 'html.parser')
+                    row_data = row_soup.find_all('td')
 
-                yield export_item
+                    export_item['year'] = reporting_year
+                    export_item['exporter'] = reporting_state
+                    export_item['importer'] = row_data[0].text.strip()
+                    export_item['category'] = row_soup.find('th').text.strip()
+                    export_item['num_items'] = row_data[1].text.strip()
+                    export_item['state_of_origin'] = row_data[2].text.strip()
+                    export_item['intermediate_locations'] = row_data[3].text.strip()
+                    export_item['comments'] = row_data[4].text.strip()
 
-            for row in import_trows:
-                import_item = ArmsTransferItem()
+                    yield export_item
 
-                arms_transfer_values = list(map(str.strip, row.xpath('./td/text()').extract()))
+                for row in import_trows:
+                    import_item = ArmsTransferItem()
 
-                import_item['year'] = url_params[3]
-                import_item['exporter'] = arms_transfer_values[0]
-                import_item['importer'] = url_params[1]
-                import_item['category'] = row.xpath('./th/text()')[0].extract()
-                import_item['num_items'] = arms_transfer_values[1]
-                import_item['state_of_origin'] = arms_transfer_values[2]
-                import_item['intermediate_locations'] = None
-                import_item['comments'] = arms_transfer_values[3]
+                    row_soup = BeautifulSoup(row.extract(), 'html.parser')
+                    row_data = row_soup.find_all('td')
 
-                yield import_item
+                    import_item['year'] = reporting_year
+                    import_item['exporter'] = row_data[0].text.strip()
+                    import_item['importer'] = reporting_state
+                    import_item['category'] = row_soup.find('th').text.strip()
+                    import_item['num_items'] = row_data[1].text.strip()
+                    import_item['state_of_origin'] = row_data[2].text.strip()
+                    import_item['intermediate_locations'] = row_data[3].text.strip()
+                    import_item['comments'] = row_data[4].text.strip()
+
+                    yield import_item
